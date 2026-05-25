@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -19,16 +19,16 @@ LINE_USER_ID = os.getenv("LINE_USER_ID")
 
 
 class TradePayload(BaseModel):
-    event: str  # open / update / close
+    event: str
     ticket: int
     symbol: str
-    direction: Optional[str] = None  # Buy / Sell
+    direction: Optional[str] = None
     entry_price: Optional[float] = None
     exit_price: Optional[float] = None
     stop_loss: Optional[float] = None
     lot_size: Optional[float] = None
     profit_loss: Optional[float] = None
-    result: Optional[str] = None  # Win / Loss / BE
+    result: Optional[str] = None
     open_time: Optional[str] = None
     close_time: Optional[str] = None
 
@@ -54,7 +54,8 @@ def line_headers():
     }
 
 
-def find_notion_page_by_ticket(ticket: int) -> Optional[str]:
+def find_notion_page_by_ticket(ticket: int):
+
     url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
 
     payload = {
@@ -66,10 +67,18 @@ def find_notion_page_by_ticket(ticket: int) -> Optional[str]:
         }
     }
 
-    response = requests.post(url, headers=notion_headers(), json=payload, timeout=15)
+    response = requests.post(
+        url,
+        headers=notion_headers(),
+        json=payload,
+        timeout=15
+    )
 
     if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=response.text
+        )
 
     results = response.json().get("results", [])
 
@@ -80,6 +89,7 @@ def find_notion_page_by_ticket(ticket: int) -> Optional[str]:
 
 
 def build_create_properties(data: TradePayload):
+
     today = datetime.now().strftime("%Y-%m-%d")
     open_time = data.open_time or datetime.now().strftime("%H:%M:%S")
 
@@ -93,11 +103,13 @@ def build_create_properties(data: TradePayload):
                 }
             ]
         },
+
         "Date": {
             "date": {
                 "start": today
             }
         },
+
         "Open Time": {
             "rich_text": [
                 {
@@ -107,6 +119,7 @@ def build_create_properties(data: TradePayload):
                 }
             ]
         },
+
         "Pair": {
             "rich_text": [
                 {
@@ -116,25 +129,31 @@ def build_create_properties(data: TradePayload):
                 }
             ]
         },
+
         "Direction": {
             "select": {
                 "name": data.direction or "Buy"
             }
         },
+
         "Status": {
             "select": {
                 "name": "Open"
             }
         },
+
         "Entry Price": {
             "number": data.entry_price
         },
+
         "Stop Loss": {
             "number": data.stop_loss
         },
+
         "Lot Size": {
             "number": data.lot_size
         },
+
         "Ticket": {
             "number": data.ticket
         },
@@ -142,32 +161,54 @@ def build_create_properties(data: TradePayload):
 
 
 def build_update_properties(data: TradePayload):
+
     properties = {}
 
     if data.stop_loss is not None:
-        properties["Stop Loss"] = {"number": data.stop_loss}
+        properties["Stop Loss"] = {
+            "number": data.stop_loss
+        }
 
     if data.lot_size is not None:
-        properties["Lot Size"] = {"number": data.lot_size}
+        properties["Lot Size"] = {
+            "number": data.lot_size
+        }
 
     if data.event == "close":
-        properties["Status"] = {"select": {"name": "Closed"}}
+
+        properties["Status"] = {
+            "select": {
+                "name": "Closed"
+            }
+        }
 
         if data.exit_price is not None:
-            properties["Exit Price"] = {"number": data.exit_price}
+            properties["Exit Price"] = {
+                "number": data.exit_price
+            }
 
         if data.profit_loss is not None:
-            properties["Profit / Loss"] = {"number": data.profit_loss}
+            properties["Profit / Loss"] = {
+                "number": data.profit_loss
+            }
 
         if data.result:
-            properties["Result"] = {"select": {"name": data.result}}
+            properties["Result"] = {
+                "select": {
+                    "name": data.result
+                }
+            }
 
     return properties
 
 
 def create_notion_trade(data: TradePayload):
+
     if not NOTION_DATABASE_ID:
-        raise HTTPException(status_code=500, detail="NOTION_DATABASE_ID is missing")
+        raise HTTPException(
+            status_code=500,
+            detail="NOTION_DATABASE_ID is missing"
+        )
 
     url = "https://api.notion.com/v1/pages"
 
@@ -178,30 +219,48 @@ def create_notion_trade(data: TradePayload):
         "properties": build_create_properties(data)
     }
 
-    response = requests.post(url, headers=notion_headers(), json=payload, timeout=15)
+    response = requests.post(
+        url,
+        headers=notion_headers(),
+        json=payload,
+        timeout=15
+    )
 
-    if response.status_code not in (200, 201):
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+    if response.status_code not in [200, 201]:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=response.text
+        )
 
     return response.json()
 
 
 def update_notion_trade(page_id: str, data: TradePayload):
+
     url = f"https://api.notion.com/v1/pages/{page_id}"
 
     payload = {
         "properties": build_update_properties(data)
     }
 
-    response = requests.patch(url, headers=notion_headers(), json=payload, timeout=15)
+    response = requests.patch(
+        url,
+        headers=notion_headers(),
+        json=payload,
+        timeout=15
+    )
 
-    if response.status_code not in (200, 201):
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+    if response.status_code not in [200, 201]:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=response.text
+        )
 
     return response.json()
 
 
 def send_line_message(text: str):
+
     headers = line_headers()
 
     if not headers or not LINE_USER_ID:
@@ -219,12 +278,20 @@ def send_line_message(text: str):
         ]
     }
 
-    response = requests.post(url, headers=headers, json=payload, timeout=15)
+    response = requests.post(
+        url,
+        headers=headers,
+        json=payload,
+        timeout=15
+    )
+
     return response.status_code
 
 
-def build_line_text(data: TradePayload) -> str:
+def build_line_text(data: TradePayload):
+
     if data.event == "open":
+
         return (
             "🟢 Open Trade\n"
             f"{data.symbol} {data.direction}\n"
@@ -235,6 +302,7 @@ def build_line_text(data: TradePayload) -> str:
         )
 
     if data.event == "close":
+
         return (
             "🔴 Closed Trade\n"
             f"{data.symbol}\n"
@@ -255,26 +323,41 @@ def build_line_text(data: TradePayload) -> str:
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "service": "MT5 to Notion Webhook"}
+
+    return {
+        "status": "ok",
+        "service": "MT5 to Notion Webhook"
+    }
 
 
 @app.post("/webhook/mt5")
 def mt5_webhook(data: TradePayload):
+
     if data.event not in ["open", "update", "close"]:
-        raise HTTPException(status_code=400, detail="event must be open, update, or close")
+        raise HTTPException(
+            status_code=400,
+            detail="event must be open, update, or close"
+        )
 
     page_id = find_notion_page_by_ticket(data.ticket)
 
     if data.event == "open":
+
         if page_id:
             notion_result = update_notion_trade(page_id, data)
             action = "updated_existing"
+
         else:
             notion_result = create_notion_trade(data)
             action = "created"
+
     else:
+
         if not page_id:
-            raise HTTPException(status_code=404, detail="Notion trade page not found by Ticket")
+            raise HTTPException(
+                status_code=404,
+                detail="Notion trade page not found by Ticket"
+            )
 
         notion_result = update_notion_trade(page_id, data)
         action = "updated"
@@ -288,4 +371,16 @@ def mt5_webhook(data: TradePayload):
         "ticket": data.ticket,
         "line_status": line_status,
         "notion_page_id": notion_result.get("id")
+    }
+
+
+@app.post("/callback")
+async def callback(request: Request):
+
+    body = await request.json()
+
+    print(body)
+
+    return {
+        "status": "ok"
     }
