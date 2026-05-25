@@ -376,11 +376,6 @@ def mt5_webhook(data: TradePayload):
 
 @app.post("/callback")
 async def callback(request: Request):
-
     body = await request.json()
-
-    print(body)
-
-    return {
-        "status": "ok"
-    }
+    print("LINE CALLBACK:", body, flush=True)
+    return {"status": "ok"}
