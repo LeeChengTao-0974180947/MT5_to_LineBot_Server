@@ -326,7 +326,6 @@ def health_check():
 
     return {
         "status": "ok",
-        "service": "MT5 to Notion Webhook"
     }
 
 
